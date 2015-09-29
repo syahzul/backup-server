@@ -1,14 +1,16 @@
 #!/bin/bash
 
 # BEGIN CONFIGURATION ==========================================================
+
 BACKUP_DIR="/root/backups"  # The directory in which you want backups placed
-DUMP_MYSQL=true
-DROPBOX_UPLOADER="/root/dropbox_uploader.sh"
+
+DROPBOX_UPLOADER="./dropbox_uploader.sh"
+DROPBOX_UPLOADER_CFG="./.dropbox_uploader"
 
 MYSQL_HOST="localhost"
 MYSQL_USER="root"
 MYSQL_PASS="root"
-MYSQL_BACKUP_DIR="$BACKUP_DIR/mysql/"
+MYSQL_BACKUP_DIR="$BACKUP_DIR/db/"
 
 SITES_DIR="/usr/share/nginx/www"
 SITES_BACKUP_DIR="$BACKUP_DIR/site/"
@@ -18,7 +20,6 @@ THE_DATE="$(date '+%Y-%m-%d')"
 
 MYSQL_PATH="$(which mysql)"
 MYSQLDUMP_PATH="$(which mysqldump)"
-FIND_PATH="$(which find)"
 TAR_PATH="$(which tar)"
 
 # Check if Dropbox Uploader exists
@@ -30,7 +31,7 @@ if [ ! -f $DROPBOX_UPLOADER ]; then
     exit
 fi  
 
-if [ ! -f "/root/.dropbox_uploder" ]; then
+if [ ! -f $DROPBOX_UPLOADER_CFG ]; then
     echo -e ""
     echo -e "\e[31mError! Run Dropbox Uploader configuration first. Run this command:\e[0m"
     echo -e "./dropbox_uploder.sh"
@@ -46,10 +47,11 @@ rm -rf $SITES_DIR/*.gz
 mkdir -p "$SITES_BACKUP_DIR"
 mkdir -p "$MYSQL_BACKUP_DIR"
 
-# Get a list of mysql databases and dump them one by one
+
 echo ""
 echo ""
 
+# Get a list of mysql databases and dump them one by one
 DBS="$($MYSQL_PATH -h $MYSQL_HOST -u$MYSQL_USER -p$MYSQL_PASS -Bse 'show databases')"
 
 echo -e "--------------------------------------------"
@@ -84,10 +86,6 @@ do
 
         # Copy the whole folder to backup 
         cp -R "$SITES_DIR/$d" "$BACKUP_DIR/$d"
-
-        # Remove old Akeeba backup files
-        rm -rf $BACKUP_DIR/$d/administrator/components/com_akeeba/backups/*.zip
-        rm -rf $BACKUP_DIR/$d/administrator/components/com_akeeba/backups/*.jpa
         
         cd $BACKUP_DIR/$d
         $TAR_PATH -czf $SITES_BACKUP_DIR/$d\_$THE_DATE.tgz ./ -C /
