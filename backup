@@ -1,0 +1,111 @@
+#!/bin/bash
+
+# BEGIN CONFIGURATION ==========================================================
+BACKUP_DIR="/root/backups"  # The directory in which you want backups placed
+DUMP_MYSQL=true
+DROPBOX_UPLOADER="/root/dropbox_uploader.sh"
+
+MYSQL_HOST="localhost"
+MYSQL_USER="root"
+MYSQL_PASS="root"
+MYSQL_BACKUP_DIR="$BACKUP_DIR/mysql/"
+
+SITES_DIR="/usr/share/nginx/www"
+SITES_BACKUP_DIR="$BACKUP_DIR/site/"
+
+# You probably won't have to change these
+THE_DATE="$(date '+%Y-%m-%d')"
+
+MYSQL_PATH="$(which mysql)"
+MYSQLDUMP_PATH="$(which mysqldump)"
+FIND_PATH="$(which find)"
+TAR_PATH="$(which tar)"
+
+# Check if Dropbox Uploader exists
+if [ ! -f $DROPBOX_UPLOADER ]; then
+    echo -e ""
+    echo -e "\e[31mError! Dropbox uploader not exists! Download it from:\e[0m"
+    echo -e "https://raw.githubusercontent.com/andreafabrizi/Dropbox-Uploader/master/dropbox_uploader.sh"
+    echo -e ""
+    exit
+fi  
+
+if [ ! -f "/root/.dropbox_uploder" ]; then
+    echo -e ""
+    echo -e "\e[31mError! Run Dropbox Uploader configuration first. Run this command:\e[0m"
+    echo -e "./dropbox_uploder.sh"
+    echo -e ""
+    exit
+fi     
+
+# Remove backup folders
+rm -rf $BACKUP_DIR/*
+rm -rf $SITES_DIR/*.gz
+
+# Re-creating backup folders
+mkdir -p "$SITES_BACKUP_DIR"
+mkdir -p "$MYSQL_BACKUP_DIR"
+
+# Get a list of mysql databases and dump them one by one
+echo ""
+echo ""
+
+DBS="$($MYSQL_PATH -h $MYSQL_HOST -u$MYSQL_USER -p$MYSQL_PASS -Bse 'show databases')"
+
+echo -e "--------------------------------------------"
+echo -e "                 DATABASE                   "
+echo -e "--------------------------------------------"
+
+for db in $DBS
+do
+    if [[ $db != "information_schema" && $db != "mysql" && $db != "performance_schema" ]]
+        then
+        echo -e "Database: \e[92m$db\e[0m"
+        $MYSQLDUMP_PATH --opt --skip-add-locks -h $MYSQL_HOST -u$MYSQL_USER -p$MYSQL_PASS $db | gzip > $MYSQL_BACKUP_DIR$db\_$THE_DATE.sql.gz
+
+        echo -e "Dropbox:  \e[94m$db\e[0m"
+        $DROPBOX_UPLOADER upload $MYSQL_BACKUP_DIR$db\_$THE_DATE.sql.gz $THE_DATE/$db\_$THE_DATE.sql.gz
+
+        echo ""
+    fi
+done
+
+echo -e "--------------------------------------------"
+echo -e "                   WEBSITE                  "
+echo -e "--------------------------------------------"
+
+cd "$SITES_DIR"
+for d in *
+do
+    # Make sure it's a folder, not a file
+    if [ -d "$d" ]; then
+
+        echo -e "Compress: \e[33m$d\e[0m"
+
+        # Copy the whole folder to backup 
+        cp -R "$SITES_DIR/$d" "$BACKUP_DIR/$d"
+
+        # Remove old Akeeba backup files
+        rm -rf $BACKUP_DIR/$d/administrator/components/com_akeeba/backups/*.zip
+        rm -rf $BACKUP_DIR/$d/administrator/components/com_akeeba/backups/*.jpa
+        
+        cd $BACKUP_DIR/$d
+        $TAR_PATH -czf $SITES_BACKUP_DIR/$d\_$THE_DATE.tgz ./ -C /
+
+        echo -e "Dropbox:  \e[94m"$d\_$THE_DATE.tgz"\e[0m"
+        $DROPBOX_UPLOADER upload $SITES_BACKUP_DIR/$d\_$THE_DATE.tgz $THE_DATE/$d\_$THE_DATE.tgz
+
+        rm -rf $BACKUP_DIR/$d\_$THE_DATE.tgz
+        rm -rf $BACKUP_DIR/$d
+
+        cd $SITES_DIR
+
+        echo -e "\e[96mDone!\e[0m"
+        echo ""
+        echo ""
+    fi
+done
+
+cd "$BACKUP_DIR"
+
+echo "All done!"
